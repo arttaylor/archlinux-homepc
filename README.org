@@ -1,1 +1,67 @@
-* My ArchLinux packages list 
+* My ArchLinux packages list
+As [[https://wiki.archlinux.org/index.php/Pacman_Tips#Backing_up_and_retrieving_a_list_of_installed_packages][ArchWiki]] said, it's good to back up all the pacman-installed packages at ArchLinux.
+
+The common practice is back up the package list in a plain text file and use pacman to re-install the packages from that file.
+
+So the key problem is where to place the list?
+
+My answer is that [[http://github.com][github]] is a good place to go, because:
+1. github's UI is good. For example, I can download the latest snapshot in a zip file through browser.
+2. Since you use git. you have copies of everything (commit history included) on both local computer and server.
+3. Git is powerful. For example, I can search and restore to any older version in a blink.
+* The solution
+Here is the bash function "backup_archlinux_packages_list" to do these jobs.
+
+#+BEGIN_SRC sh
+# backup packages
+# @see https://wiki.archlinux.org/index.php/Pacman_Tips#Backing_up_and_retrieving_a_list_of_installed_packages
+# @param GITHUB_USR optional, the user name of github.com. If empty, only local backup
+function backup_archlinux_packages_list() {
+   mkdir -p $HOME/archlinux
+   comm -23 <(pacman -Qeq|sort) <(pacman -Qmq|sort) > $HOME/archlinux/pkglist.txt
+   if [ ! -e $HOME/archlinux/README.org ]; then
+      echo "* My ArchLinux packages list " > $HOME/archlinux/README.org
+   fi
+   local GIT=`/usr/bin/which git`
+   local GITHUB_USR=$1 #first parameter, optional
+
+   if [ "${GIT}x" = "x" ]; then
+      echo Git not found! You need to install git first.
+      return 0
+   fi
+
+   cd $HOME/archlinux
+   if [ ! -d $HOME/archlinux/.git ]; then
+      #first import
+      $GIT init
+      $GIT add $HOME/archlinux/pkglist.txt $HOME/archlinux/README*
+      $GIT commit -m 'first import'
+      if [ ! "${GITHUB_USR}x" = "x" ]; then
+         $GIT remote add origin "git@github.com:${GITHUB_USR}/archlinux-${HOSTNAME}.git"
+         $GIT push -u origin master
+      fi
+   else
+      # normal commit
+      local gd=`${GIT} diff .`
+      if [ ! "${gd}x" == "x" ]; then
+         # only add files already under track
+         $GIT add -u .
+         $GIT commit -m `date +%H%M%S-%Y-%m-%d`
+         if [ ! "${GITHUB_USR}x" = "x" ]; then
+            $GIT push origin master
+         fi
+      fi
+   fi
+   cd $HOME
+   return 0
+}
+#+END_SRC
+
+I place the function in ~/.bashrc:
+#+BEGIN_SRC sh
+if [ -e /usr/bin/pacman ]; then
+   backup_archlinux_packages_list my_github_usr
+fi
+#+END_SRC
+
+Please note if the parameter for "backup_archlinux_packages_list" is empty. The git will only back up the data in local machine.
